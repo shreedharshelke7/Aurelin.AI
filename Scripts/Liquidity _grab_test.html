@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Higgs AI — Scene Script Test</title>
+<style>
+  :root {
+    --bg: #FAF6EF;
+    --panel: #FFFFFF;
+    --border: #E7DFD1;
+    --text: #6B5B4D;
+    --text-soft: #9C8D7C;
+    --up: #4E8C7A;
+    --down: #C97C68;
+    --gold: #B08D57;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Georgia, "Times New Roman", serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 60px 20px;
+  }
+
+  .eyebrow {
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-size: 11px;
+    color: var(--text-soft);
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    margin-bottom: 10px;
+  }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 400;
+    margin: 0 0 6px 0;
+    color: #4A3B2E;
+  }
+
+  #label {
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px;
+    color: var(--gold);
+    letter-spacing: 0.03em;
+    margin-bottom: 40px;
+  }
+
+  .stage {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 30px 30px;
+    box-shadow: 0 20px 40px -30px rgba(74, 59, 46, 0.25);
+  }
+
+  svg { display: block; }
+
+  .liq-line {
+    stroke: var(--gold);
+    stroke-width: 1.5;
+    stroke-dasharray: 6 6;
+    stroke-dashoffset: 760;
+    animation: drawLine 1.2s ease-out forwards;
+  }
+
+  .liq-label {
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    font-size: 11px;
+    fill: var(--gold);
+    opacity: 0;
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+
+  @keyframes drawLine {
+    to { stroke-dashoffset: 0; }
+  }
+
+  @keyframes fadeIn {
+    to { opacity: 1; }
+  }
+
+  .candle-body {
+    transform-box: fill-box;
+    transform-origin: bottom;
+    transform: scaleY(0);
+    animation: growCandle 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  @keyframes growCandle {
+    to { transform: scaleY(1); }
+  }
+
+  .wick {
+    opacity: 0;
+    animation: fadeIn 0.25s ease-out forwards;
+  }
+
+  .grab-mark {
+    opacity: 0;
+    transform: translateY(6px);
+    animation: dropIn 0.5s ease-out forwards;
+  }
+
+  @keyframes dropIn {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .grab-text {
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    fill: var(--gold);
+  }
+
+  #raw-toggle {
+    margin-top: 28px;
+    font-family: -apple-system, "Segoe UI", sans-serif;
+    font-size: 12px;
+    color: var(--text-soft);
+    cursor: pointer;
+    text-decoration: underline;
+    background: none;
+    border: none;
+  }
+
+  #raw {
+    display: none;
+    width: 640px;
+    margin-top: 14px;
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    color: var(--text-soft);
+    white-space: pre-wrap;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 16px;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+
+<div class="eyebrow">Higgs AI — Concept Replay</div>
+<h1 id="title">Liquidity Grab</h1>
+<div id="label">Loading…</div>
+
+<div class="stage">
+  <svg id="chart" width="700" height="380" viewBox="0 0 700 380"></svg>
+</div>
+
+<button id="raw-toggle" onclick="toggleRaw()">View scene script JSON</button>
+<pre id="raw"></pre>
+
+<script>
+// ---- Scene script: chop near an old high, wick spikes through it, then reversal down ----
+fetch('Data/scene_output.json')
+  .then(response => response.json())
+  .then(sceneScript => {
+    document.getElementById("label").innerText = sceneScript.label;
+    document.getElementById("raw").innerText = JSON.stringify(sceneScript, null, 2);
+
+    function toggleRaw() {
+      const el = document.getElementById("raw");
+      el.style.display = el.style.display === "block" ? "none" : "block";
+    }
+
+    // ---- Work out value range across all candles + the level, so everything fits ----
+
+    const svg = document.getElementById("chart");
+    const svgNS = "http://www.w3.org/2000/svg";
+    const candles = sceneScript.candles;
+
+    const chartWidth = 700;
+    const chartHeight = 380;
+    const marginTop = 40;
+    const marginBottom = 30;
+    const candleWidth = 14;
+    const startX = 20;
+    const margin = 50;
+    const gap = (chartWidth - startX - margin) / candles.length;
+
+    let minVal = Infinity, maxVal = -Infinity;
+    candles.forEach(c => {
+      minVal = Math.min(minVal, c.wickLow, c.open, c.close);
+      maxVal = Math.max(maxVal, c.wickHigh, c.open, c.close);
+    });
+    minVal = Math.min(minVal, sceneScript.old_high_level);
+    maxVal = Math.max(maxVal, sceneScript.old_high_level);
+
+    const usableHeight = chartHeight - marginTop - marginBottom;
+    const scale = usableHeight / (maxVal - minVal);
+
+    function valToY(v) {
+      return chartHeight - marginBottom - (v - minVal) * scale;
+    }
+
+    // ---- Draw candles ----
+    const candleXCenters = [];
+
+    candles.forEach((c, i) => {
+      const x = startX + i * gap;
+      candleXCenters.push(x + candleWidth / 2);
+
+      const isUp = c.close >= c.open;
+      const color = isUp ? "#4E8C7A" : "#C97C68";
+
+      const bodyTopVal = Math.max(c.open, c.close);
+      const bodyBottomVal = Math.min(c.open, c.close);
+      const bodyTopY = valToY(bodyTopVal);
+      const bodyBottomY = valToY(bodyBottomVal);
+      const bodyHeight = Math.max(bodyBottomY - bodyTopY, 1.5);
+
+      // wick line
+      const wick = document.createElementNS(svgNS, "line");
+      wick.setAttribute("x1", x + candleWidth / 2);
+      wick.setAttribute("x2", x + candleWidth / 2);
+      wick.setAttribute("y1", valToY(c.wickHigh));
+      wick.setAttribute("y2", valToY(c.wickLow));
+      wick.setAttribute("stroke", color);
+      wick.setAttribute("stroke-width", "1.5");
+      wick.classList.add("wick");
+      wick.style.animationDelay = (i * 0.045 + 0.1) + "s";
+      svg.appendChild(wick);
+
+      // body
+      const rect = document.createElementNS(svgNS, "rect");
+      rect.setAttribute("x", x);
+      rect.setAttribute("y", bodyTopY);
+      rect.setAttribute("width", candleWidth);
+      rect.setAttribute("height", bodyHeight);
+      rect.setAttribute("fill", color);
+      rect.setAttribute("rx", "1.5");
+      rect.classList.add("candle-body");
+      rect.style.animationDelay = (i * 0.045) + "s";
+      svg.appendChild(rect);
+    });
+
+    const totalCandleTime = candles.length * 0.045 + 0.4;
+
+    // ---- Old high liquidity level line ----
+    const levelY = valToY(sceneScript.old_high_level);
+    const lineEndX = startX + candles.length * gap;
+
+    const line = document.createElementNS(svgNS, "line");
+    line.setAttribute("x1", startX - 10);
+    line.setAttribute("y1", levelY);
+    line.setAttribute("x2", lineEndX);
+    line.setAttribute("y2", levelY);
+    line.classList.add("liq-line");
+    line.style.animationDelay = totalCandleTime + "s";
+    svg.appendChild(line);
+
+    const liqLabel = document.createElementNS(svgNS, "text");
+    liqLabel.setAttribute("x", lineEndX + 5);
+    liqLabel.setAttribute("y", levelY + 4);
+    liqLabel.classList.add("liq-label");
+    liqLabel.style.animationDelay = (totalCandleTime + 0.8) + "s";
+    liqLabel.textContent = "Old High";
+    svg.appendChild(liqLabel);
+
+    // ---- Grab marker at the wick tip that spiked through the level ----
+    const grabIndex = sceneScript.grab_candle_index;
+    const grabCandle = candles[grabIndex];
+    const grabX = candleXCenters[grabIndex];
+    const grabY = valToY(grabCandle.wickHigh) - 14;
+
+    const arrow = document.createElementNS(svgNS, "text");
+    arrow.setAttribute("x", grabX);
+    arrow.setAttribute("y", grabY);
+    arrow.setAttribute("text-anchor", "middle");
+    arrow.classList.add("grab-mark", "grab-text");
+    arrow.style.animationDelay = (totalCandleTime + 1.2) + "s";
+    arrow.textContent = "↓ Grab";
+    svg.appendChild(arrow);
+   })
+  .catch(error => {
+    console.error("Could not load scene_output.json:", error);
+  });
+</script>
+
+</body>
+</html>
