@@ -143,6 +143,11 @@
     padding: 16px;
     border-radius: 4px;
   }
+
+.fade-in-label {
+  opacity: 0;
+  animation: fadeIn 0.5s ease-out forwards;
+}
 </style>
 </head>
 <body>
@@ -159,7 +164,6 @@
 <pre id="raw"></pre>
 
 <script>
-// ---- Scene script: chop near an old high, wick spikes through it, then reversal down ----
 fetch('../Data/scene_output.json')
   .then(response => response.json())
   .then(sceneScript => {
@@ -170,8 +174,6 @@ fetch('../Data/scene_output.json')
       const el = document.getElementById("raw");
       el.style.display = el.style.display === "block" ? "none" : "block";
     }
-
-    // ---- Work out value range across all candles + the level, so everything fits ----
 
     const svg = document.getElementById("chart");
     const svgNS = "http://www.w3.org/2000/svg";
@@ -201,8 +203,9 @@ fetch('../Data/scene_output.json')
       return chartHeight - marginBottom - (v - minVal) * scale;
     }
 
-    // ---- Draw candles ----
+    // ---- Build candle elements (NOT appended yet, NOT animated yet) ----
     const candleXCenters = [];
+    const candleEls = []; // { wick, body }
 
     candles.forEach((c, i) => {
       const x = startX + i * gap;
@@ -217,7 +220,6 @@ fetch('../Data/scene_output.json')
       const bodyBottomY = valToY(bodyBottomVal);
       const bodyHeight = Math.max(bodyBottomY - bodyTopY, 1.5);
 
-      // wick line
       const wick = document.createElementNS(svgNS, "line");
       wick.setAttribute("x1", x + candleWidth / 2);
       wick.setAttribute("x2", x + candleWidth / 2);
@@ -225,11 +227,8 @@ fetch('../Data/scene_output.json')
       wick.setAttribute("y2", valToY(c.wickLow));
       wick.setAttribute("stroke", color);
       wick.setAttribute("stroke-width", "1.5");
-      wick.classList.add("wick");
-      wick.style.animationDelay = (i * 0.045 + 0.1) + "s";
-      svg.appendChild(wick);
+      // class added later, at reveal time
 
-      // body
       const rect = document.createElementNS(svgNS, "rect");
       rect.setAttribute("x", x);
       rect.setAttribute("y", bodyTopY);
@@ -237,14 +236,12 @@ fetch('../Data/scene_output.json')
       rect.setAttribute("height", bodyHeight);
       rect.setAttribute("fill", color);
       rect.setAttribute("rx", "1.5");
-      rect.classList.add("candle-body");
-      rect.style.animationDelay = (i * 0.045) + "s";
-      svg.appendChild(rect);
+      // class added later, at reveal time
+
+      candleEls.push({ wick, body: rect });
     });
 
-    const totalCandleTime = candles.length * 0.045 + 0.4;
-
-    // ---- Old high liquidity level line ----
+    // ---- Old high line + label (built, not appended yet) ----
     const levelY = valToY(sceneScript.old_high_level);
     const lineEndX = startX + candles.length * gap;
 
@@ -253,19 +250,15 @@ fetch('../Data/scene_output.json')
     line.setAttribute("y1", levelY);
     line.setAttribute("x2", lineEndX);
     line.setAttribute("y2", levelY);
-    line.classList.add("liq-line");
-    line.style.animationDelay = totalCandleTime + "s";
-    svg.appendChild(line);
+    // class added later
 
     const liqLabel = document.createElementNS(svgNS, "text");
     liqLabel.setAttribute("x", lineEndX + 5);
     liqLabel.setAttribute("y", levelY + 4);
-    liqLabel.classList.add("liq-label");
-    liqLabel.style.animationDelay = (totalCandleTime + 0.8) + "s";
+    liqLabel.classList.add("liq-label"); // static text styling ok, opacity/animation handled below
     liqLabel.textContent = "Old High";
-    svg.appendChild(liqLabel);
 
-    // ---- Grab marker at the wick tip that spiked through the level ----
+    // ---- Grab marker (built, not appended yet) ----
     const grabIndex = sceneScript.grab_candle_index;
     const grabCandle = candles[grabIndex];
     const grabX = candleXCenters[grabIndex];
@@ -275,15 +268,77 @@ fetch('../Data/scene_output.json')
     arrow.setAttribute("x", grabX);
     arrow.setAttribute("y", grabY);
     arrow.setAttribute("text-anchor", "middle");
-    arrow.classList.add("grab-mark", "grab-text");
-    arrow.style.animationDelay = (totalCandleTime + 1.2) + "s";
+    arrow.classList.add("grab-text"); // static styling only, no animation class yet
     arrow.textContent = "↓ Grab";
-    svg.appendChild(arrow);
-   })
+
+    // ================== STEP PLAYER ==================
+
+    const steps = sceneScript.steps || [];
+    let candlesRevealedUpto = -1;
+    let lineRevealed = false;
+    let markerRevealed = false;
+
+    function revealCandle(i, delaySec) {
+      const { wick, body } = candleEls[i];
+      wick.style.animationDelay = delaySec + "s";
+      body.style.animationDelay = delaySec + "s";
+      wick.classList.add("wick");
+      body.classList.add("candle-body");
+      svg.appendChild(wick);
+      svg.appendChild(body);
+    }
+
+    function revealLine(delaySec) {
+      line.style.animationDelay = delaySec + "s";
+      liqLabel.style.animationDelay = (delaySec + 0.3) + "s";
+      line.classList.add("liq-line");
+      liqLabel.classList.add("fade-in-label"); // triggers fadeIn via opacity/animation
+      svg.appendChild(line);
+      svg.appendChild(liqLabel);
+      lineRevealed = true;
+    }
+
+    function revealMarker(delaySec) {
+      arrow.style.animationDelay = delaySec + "s";
+      arrow.classList.add("grab-mark");
+      svg.appendChild(arrow);
+      markerRevealed = true;
+    }
+
+    function showStep(stepData) {
+      const el = stepData.elements;
+      let localDelay = 0;
+
+      const targetUpto = el.candles_visible_upto;
+      for (let i = candlesRevealedUpto + 1; i <= targetUpto; i++) {
+        revealCandle(i, localDelay);
+        localDelay += 0.2;
+      }
+      candlesRevealedUpto = Math.max(candlesRevealedUpto, targetUpto);
+
+      if (el.old_high_line && !lineRevealed) {
+        revealLine(localDelay + 0.1);
+      }
+
+      if (el.grab_marker && !markerRevealed) {
+        revealMarker(localDelay + 0.3);
+      }
+    }
+
+    function playSteps() {
+      const STEP_INTERVAL_MS = 3000;
+      steps.forEach((stepData, idx) => {
+        setTimeout(() => showStep(stepData), idx * STEP_INTERVAL_MS);
+      });
+    }
+
+    if (steps.length > 0) {
+      playSteps();
+    }
+  })
   .catch(error => {
     console.error("Could not load scene_output.json:", error);
   });
 </script>
-
 </body>
 </html>
