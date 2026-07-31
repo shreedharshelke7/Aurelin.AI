@@ -5,10 +5,30 @@ from dotenv import load_dotenv
 import numpy as np 
 from google.genai import types
 from groq import Groq
+from tavily import TavilyClient
 
 load_dotenv()
 client = genai.Client(api_key=os.getenv("gemini_api_key"))
 groq_client = Groq(api_key=os.getenv("groq_api_key"))
+tavily_client = TavilyClient(api_key=os.getenv("tavily_api_key"))
+
+
+def web_search_and_embed(question):
+    response = tavily_client.search(query=question, max_results=1)
+    if not response["results"]:
+        return None, None
+
+    web_text = response["results"][0]["content"]
+
+    result = client.models.embed_content(
+        model="gemini-embedding-001",
+        contents=web_text,
+        config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
+    )
+    web_embedding = result.embeddings[0].values
+
+    return web_text, web_embedding
+
 
 def load_chunks(path):
     with open(path,"r",encoding="utf-8") as f:
@@ -142,6 +162,8 @@ def get_liquidity_grab_scene():
             }
         ]
     }
+
+
 def get_scene_script(chunk, score, threshold):
     if score >= threshold and chunk.get("concept") == "liquidity_grab":
         return get_liquidity_grab_scene()
@@ -157,15 +179,21 @@ if __name__ == "__main__":
     similarity_threshold = 0.70
     chunks= load_chunks("Data/embeddings.json")
     query = input("Ask Question : ")
-    best_chunk, score = find_best_chunk(query, chunks)
+    best_chunk, best_chunk_score = find_best_chunk(query, chunks)
+    web_text,web_embedding = web_search_and_embed(query)
+
     if best_chunk is not None:
         print(f"Matched chunk: [{best_chunk['timestamp']}] {best_chunk['text']}")
-        print(score)
-        if score >= similarity_threshold:
-            print(generate_answer(query,best_chunk["text"],grounded=True))
+        print(f"best chunk score : {best_chunk_score}")
+        if best_chunk_score >= similarity_threshold:
+            if web_embedding:
+                web_chunk_score = cosine_similarity(web_embedding,best_chunk['embedding'])
+                print(f"web search chunk score : {web_chunk_score}")
+                print(f"{web_text}")
+                #print(generate_answer(query,best_chunk["text"],grounded=True))
         else:
             print(generate_answer(query,None,grounded=False))
-    scene = get_scene_script(best_chunk, score, similarity_threshold)
+    scene = get_scene_script(best_chunk, best_chunk_score, similarity_threshold)
     if scene:
         save_scene_script(scene)
         
