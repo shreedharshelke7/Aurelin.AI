@@ -42,7 +42,7 @@ def srt_to_timestamped_text(srt_path, output_txt_path, window_seconds=45):
       buffer_text.append(text)
 
     if buffer_text:
-      mm, ss = divmod(window_start, 60)
+      mm, ss = divmod(window_start,60)
       lines_out.append(f"[{mm:02d}:{ss:02d}] {' '.join(buffer_text)}")
 
     with open(output_txt_path, "w", encoding="utf-8") as f:
@@ -82,7 +82,7 @@ def extract_audio(input_source,is_link,output_path):
         subprocess.run(["ffmpeg", "-i", input_source,"-q:a", "0", "-map", "a", output_path, "-y"], check=True)
     
 def get_transcript(audio_source,concept_name):
-    output_dir = "data/transcripts"
+    output_dir = "Data/srt"
     os.makedirs(output_dir, exist_ok=True)
     subprocess.run([
         "whisper",audio_source,"--model","base",
@@ -106,11 +106,14 @@ def main():
     print(f"Is YouTube link? {is_youtube_link(input_source)}")
     concept_name = get_concept_name(input_source,args)
     print(f"concept name : {concept_name}")
-    output_path = f"Data/audio/{concept_name}.mp3"
-    extract_audio(input_source,is_youtube_link(input_source),output_path)
-    print(f"Audio saved to {output_path}")
-    srt_path= get_transcript(output_path,concept_name)
+
+    audio_output_path = f"Data/audio/{concept_name}.mp3"
     transcript_path = f"Data/transcripts/{concept_name}.txt"
+
+    extract_audio(input_source,is_youtube_link(input_source),audio_output_path)
+    print(f"Audio saved to {audio_output_path}")
+
+    srt_path = get_transcript(audio_output_path,concept_name)
     srt_to_timestamped_text(srt_path,transcript_path)
     print(f"Transcript saved to : {transcript_path}")
 

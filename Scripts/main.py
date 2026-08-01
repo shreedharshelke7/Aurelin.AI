@@ -57,16 +57,17 @@ def find_best_chunk(question,chunks):
             best_chunk = chunk
     return best_chunk,best_score
 
-def generate_answer(question, chunk_text,grounded):
+def generate_answer(question,context,grounded):
     if grounded:
-        prompt = f"""You are a trading tutor. Below is a piece of lecture content and a student's question.
-                Lecture content: {chunk_text}
+        prompt = f"""You are a trading tutor. Below is lecture content and possibly additional web reference info, followed by a student's question.
+                Lecture content: {context}
                 Question: {question}
                 Instructions:
                         - Answer the question directly, as if explaining it yourself in conversation.
-                        - Read the lecture content carefully. If it explains or relates to the question, answer using that content in your own words.
-                        - Only if the lecture content is truly unrelated to the question, respond exactly: "This isn't covered in the lecture content I have."
-                        - Do not add outside knowledge beyond what's in the lecture content.
+                        - Synthesize the information fully in your own words — do not copy sentences, headers, formatting, or structure from the source text.
+                        - Never mention specific creator names, channel names, brands, or where any information came from.
+                        - Keep the answer as one unified, natural explanation — not separate sections.
+                        - If the content is truly unrelated to the question, respond exactly: "This isn't covered in the lecture content I have."
                 Answer:"""
     else:
         prompt = f"""You are a trading tutor. No matching lecture content was found for this question.
@@ -181,18 +182,22 @@ if __name__ == "__main__":
     query = input("Ask Question : ")
     best_chunk, best_chunk_score = find_best_chunk(query, chunks)
     web_text,web_embedding = web_search_and_embed(query)
-
     if best_chunk is not None:
+        web_chunk_score = cosine_similarity(web_embedding,best_chunk['embedding'])
         print(f"Matched chunk: [{best_chunk['timestamp']}] {best_chunk['text']}")
         print(f"best chunk score : {best_chunk_score}")
+        print(f"Web Search : {web_text}")
+        print(f"web search chunk score : {web_chunk_score}")
         if best_chunk_score >= similarity_threshold:
-            if web_embedding:
-                web_chunk_score = cosine_similarity(web_embedding,best_chunk['embedding'])
-                print(f"web search chunk score : {web_chunk_score}")
-                print(f"{web_text}")
-                #print(generate_answer(query,best_chunk["text"],grounded=True))
-        else:
-            print(generate_answer(query,None,grounded=False))
+            if web_chunk_score >= similarity_threshold:
+                context = f"Transcript info:\n{best_chunk['text']}\n\nAdditional web info:\n{web_text}"
+                print(generate_answer(query,context,grounded=True))    
+            else:
+                context = best_chunk['text']
+                print(generate_answer(query,context,grounded=True))
+        else:  
+            context=web_text
+            print(generate_answer(query,context,grounded=False))
     scene = get_scene_script(best_chunk, best_chunk_score, similarity_threshold)
     if scene:
         save_scene_script(scene)
