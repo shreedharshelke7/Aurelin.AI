@@ -25,7 +25,9 @@ def web_search_and_embed(question):
         contents=web_text,
         config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
     )
-    web_embedding = result.embeddings[0].values
+    web_embedding=None
+    if result.embeddings is not None:
+        web_embedding = result.embeddings[0].values
 
     return web_text, web_embedding
 
@@ -164,20 +166,44 @@ def get_liquidity_grab_scene():
         ]
     }
 
+def get_order_block_scene():
+    scene = {
+        "concept": "order_block",
+        "candles": [
+            {"id": 1, "open": 100, "high": 101, "low": 97,  "close": 98,  "type": "setup"},
+            {"id": 2, "open": 98,  "high": 99,  "low": 95,  "close": 96,  "type": "setup"},
+            {"id": 3, "open": 96,  "high": 97,  "low": 93,  "close": 94,  "type": "ob_candle"},
+            {"id": 4, "open": 94,  "high": 99,  "low": 93.5,"close": 98,  "type": "impulse"},
+            {"id": 5, "open": 98,  "high": 104, "low": 97,  "close": 103, "type": "impulse"},
+            {"id": 6, "open": 103, "high": 105, "low": 100, "close": 101, "type": "return"},
+            {"id": 7, "open": 101, "high": 102, "low": 96.5,"close": 97,  "type": "reaction"},
+            {"id": 8, "open": 97,  "high": 103, "low": 96,  "close": 102, "type": "expansion"}
+        ],
+        "steps": [
+            {"step": 1, "action": "reveal_candles", "range": [1, 2], "narration": "Price is trending down, forming lower lows."},
+            {"step": 2, "action": "reveal_candle_with_pulse", "candle_id": 3, "narration": "This is the last down-close candle before the move — our potential order block."},
+            {"step": 3, "action": "reveal_candles", "range": [4, 5], "narration": "Price makes a strong impulsive move up, confirming this was the pivot."},
+            {"step": 4, "action": "draw_rectangle", "from_candle": 3, "extend_to": "end", "narration": "This candle's range becomes our bullish order block."},
+            {"step": 5, "action": "reveal_candle", "candle_id": 6, "narration": "Price later pulls back, returning toward this zone."},
+            {"step": 6, "action": "reveal_candle_with_pulse", "candle_id": 7, "highlight_zone": True, "narration": "Price reacts right at the order block — this is the test."},
+            {"step": 7, "action": "reveal_candles_expand_up", "range": [8], "narration": "And expands upward — the order block held as support."}
+        ]
+    }
+    return scene
 
 def get_scene_script(chunk, score, threshold):
-    if score >= threshold and chunk.get("concept") == "liquidity_grab":
-        return get_liquidity_grab_scene()
+    if score >= threshold and chunk.get("concept") == "ob":
+        return get_order_block_scene()
     return None
 
 def save_scene_script(scene):
-    output_path = "Data/scene_output.json"
+    output_path = "scene_output.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(scene, f, indent=2)
 
 
 if __name__ == "__main__":
-    similarity_threshold = 0.70
+    similarity_threshold = 0.65
     chunks= load_chunks("Data/embeddings.json")
     query = input("Ask Question : ")
     best_chunk, best_chunk_score = find_best_chunk(query, chunks)
@@ -199,6 +225,7 @@ if __name__ == "__main__":
             context=web_text
             print(generate_answer(query,context,grounded=False))
     scene = get_scene_script(best_chunk, best_chunk_score, similarity_threshold)
+    print(scene)
     if scene:
         save_scene_script(scene)
         

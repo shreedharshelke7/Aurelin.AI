@@ -164,7 +164,7 @@
 <pre id="raw"></pre>
 
 <script>
-fetch('../Data/scene_output.json')
+fetch('scene_output.json')
   .then(response => response.json())
   .then(sceneScript => {
     document.getElementById("label").innerText = sceneScript.label;

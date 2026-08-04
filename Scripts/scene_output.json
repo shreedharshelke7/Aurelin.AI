@@ -1,0 +1,123 @@
+{
+  "concept": "order_block",
+  "candles": [
+    {
+      "id": 1,
+      "open": 100,
+      "high": 101,
+      "low": 97,
+      "close": 98,
+      "type": "setup"
+    },
+    {
+      "id": 2,
+      "open": 98,
+      "high": 99,
+      "low": 95,
+      "close": 96,
+      "type": "setup"
+    },
+    {
+      "id": 3,
+      "open": 96,
+      "high": 97,
+      "low": 93,
+      "close": 94,
+      "type": "ob_candle"
+    },
+    {
+      "id": 4,
+      "open": 94,
+      "high": 99,
+      "low": 93.5,
+      "close": 98,
+      "type": "impulse"
+    },
+    {
+      "id": 5,
+      "open": 98,
+      "high": 104,
+      "low": 97,
+      "close": 103,
+      "type": "impulse"
+    },
+    {
+      "id": 6,
+      "open": 103,
+      "high": 105,
+      "low": 100,
+      "close": 101,
+      "type": "return"
+    },
+    {
+      "id": 7,
+      "open": 101,
+      "high": 102,
+      "low": 96.5,
+      "close": 97,
+      "type": "reaction"
+    },
+    {
+      "id": 8,
+      "open": 97,
+      "high": 103,
+      "low": 96,
+      "close": 102,
+      "type": "expansion"
+    }
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "reveal_candles",
+      "range": [
+        1,
+        2
+      ],
+      "narration": "Price is trending down, forming lower lows."
+    },
+    {
+      "step": 2,
+      "action": "reveal_candle_with_pulse",
+      "candle_id": 3,
+      "narration": "This is the last down-close candle before the move \u2014 our potential order block."
+    },
+    {
+      "step": 3,
+      "action": "reveal_candles",
+      "range": [
+        4,
+        5
+      ],
+      "narration": "Price makes a strong impulsive move up, confirming this was the pivot."
+    },
+    {
+      "step": 4,
+      "action": "draw_rectangle",
+      "from_candle": 3,
+      "extend_to": "end",
+      "narration": "This candle's range becomes our bullish order block."
+    },
+    {
+      "step": 5,
+      "action": "reveal_candle",
+      "candle_id": 6,
+      "narration": "Price later pulls back, returning toward this zone."
+    },
+    {
+      "step": 6,
+      "action": "reveal_candle_with_pulse",
+      "candle_id": 7,
+      "highlight_zone": true,
+      "narration": "Price reacts right at the order block \u2014 this is the test."
+    },
+    {
+      "step": 7,
+      "action": "reveal_candles_expand_up",
+      "range": [
+        8
+      ],
+      "narration": "And expands upward \u2014 the order block held as support."
+    }
+  ]
+}
