@@ -143,7 +143,11 @@
     padding: 16px;
     border-radius: 4px;
   }
-
+.ob-rectangle {
+  fill: rgba(176, 141, 87, 0.15);
+  stroke: #B08D57;
+  stroke-width: 1;
+}
 .fade-in-label {
   opacity: 0;
   animation: fadeIn 0.5s ease-out forwards;
@@ -153,7 +157,7 @@
 <body>
 
 <div class="eyebrow">Aurelin AI — Concept Replay</div>
-<h1 id="title">Liquidity Grab</h1>
+<h1 id="title">Concept</h1>
 <div id="label">Loading…</div>
 
 <div class="stage">
@@ -164,16 +168,17 @@
 <pre id="raw"></pre>
 
 <script>
-fetch('scene_output.json')
-  .then(response => response.json())
-  .then(sceneScript => {
-    document.getElementById("label").innerText = sceneScript.label;
-    document.getElementById("raw").innerText = JSON.stringify(sceneScript, null, 2);
 
-    function toggleRaw() {
+function toggleRaw() {
       const el = document.getElementById("raw");
       el.style.display = el.style.display === "block" ? "none" : "block";
     }
+
+fetch('scene_output.json')
+  .then(response => response.json())
+  .then(sceneScript => {
+    document.getElementById("label").innerText = sceneScript.label || sceneScript.concept;
+    document.getElementById("raw").innerText = JSON.stringify(sceneScript, null, 2);
 
     const svg = document.getElementById("chart");
     const svgNS = "http://www.w3.org/2000/svg";
@@ -193,8 +198,10 @@ fetch('scene_output.json')
       minVal = Math.min(minVal, c.wickLow, c.open, c.close);
       maxVal = Math.max(maxVal, c.wickHigh, c.open, c.close);
     });
-    minVal = Math.min(minVal, sceneScript.old_high_level);
-    maxVal = Math.max(maxVal, sceneScript.old_high_level);
+    if (sceneScript.old_high_level !== undefined) {
+      minVal = Math.min(minVal, sceneScript.old_high_level);
+      maxVal = Math.max(maxVal, sceneScript.old_high_level);
+    }
 
     const usableHeight = chartHeight - marginTop - marginBottom;
     const scale = usableHeight / (maxVal - minVal);
@@ -203,9 +210,9 @@ fetch('scene_output.json')
       return chartHeight - marginBottom - (v - minVal) * scale;
     }
 
-    // ---- Build candle elements (NOT appended yet, NOT animated yet) ----
+    // ---- Build candle elements ----
     const candleXCenters = [];
-    const candleEls = []; // { wick, body }
+    const candleEls = [];
 
     candles.forEach((c, i) => {
       const x = startX + i * gap;
@@ -227,7 +234,6 @@ fetch('scene_output.json')
       wick.setAttribute("y2", valToY(c.wickLow));
       wick.setAttribute("stroke", color);
       wick.setAttribute("stroke-width", "1.5");
-      // class added later, at reveal time
 
       const rect = document.createElementNS(svgNS, "rect");
       rect.setAttribute("x", x);
@@ -236,92 +242,177 @@ fetch('scene_output.json')
       rect.setAttribute("height", bodyHeight);
       rect.setAttribute("fill", color);
       rect.setAttribute("rx", "1.5");
-      // class added later, at reveal time
 
-      candleEls.push({ wick, body: rect });
+      candleEls.push({ wick, body: rect, x, bodyTopY: bodyTopY, data: c });
     });
 
-    // ---- Old high line + label (built, not appended yet) ----
-    const levelY = valToY(sceneScript.old_high_level);
-    const lineEndX = startX + candles.length * gap;
+    // ---- Old high line + label (liquidity_grab specific, built if data present) ----
+    let line, liqLabel;
+    if (sceneScript.old_high_level !== undefined) {
+      const levelY = valToY(sceneScript.old_high_level);
+      const lineEndX = startX + candles.length * gap;
 
-    const line = document.createElementNS(svgNS, "line");
-    line.setAttribute("x1", startX - 10);
-    line.setAttribute("y1", levelY);
-    line.setAttribute("x2", lineEndX);
-    line.setAttribute("y2", levelY);
-    // class added later
+      line = document.createElementNS(svgNS, "line");
+      line.setAttribute("x1", startX - 10);
+      line.setAttribute("y1", levelY);
+      line.setAttribute("x2", lineEndX);
+      line.setAttribute("y2", levelY);
 
-    const liqLabel = document.createElementNS(svgNS, "text");
-    liqLabel.setAttribute("x", lineEndX + 5);
-    liqLabel.setAttribute("y", levelY + 4);
-    liqLabel.classList.add("liq-label"); // static text styling ok, opacity/animation handled below
-    liqLabel.textContent = "Old High";
+      liqLabel = document.createElementNS(svgNS, "text");
+      liqLabel.setAttribute("x", lineEndX + 5);
+      liqLabel.setAttribute("y", levelY + 4);
+      liqLabel.classList.add("liq-label");
+      liqLabel.textContent = "Old High";
+    }
 
-    // ---- Grab marker (built, not appended yet) ----
-    const grabIndex = sceneScript.grab_candle_index;
-    const grabCandle = candles[grabIndex];
-    const grabX = candleXCenters[grabIndex];
-    const grabY = valToY(grabCandle.wickHigh) - 14;
+    // ---- Grab marker (liquidity_grab specific, built if index present) ----
+    let arrow;
+    if (sceneScript.grab_candle_index !== undefined) {
+      const grabIndex = sceneScript.grab_candle_index;
+      const grabCandle = candles[grabIndex];
+      const grabX = candleXCenters[grabIndex];
+      const grabY = valToY(grabCandle.wickHigh) - 14;
 
-    const arrow = document.createElementNS(svgNS, "text");
-    arrow.setAttribute("x", grabX);
-    arrow.setAttribute("y", grabY);
-    arrow.setAttribute("text-anchor", "middle");
-    arrow.classList.add("grab-text"); // static styling only, no animation class yet
-    arrow.textContent = "↓ Grab";
+      arrow = document.createElementNS(svgNS, "text");
+      arrow.setAttribute("x", grabX);
+      arrow.setAttribute("y", grabY);
+      arrow.setAttribute("text-anchor", "middle");
+      arrow.classList.add("grab-text");
+      arrow.textContent = "↓ Grab";
+    }
 
-    // ================== STEP PLAYER ==================
+    // ---- Rectangle for order_block (built on demand inside draw_rectangle action) ----
+    let obRect = null;
+
+    // ================== STEP PLAYER (generic actions) ==================
 
     const steps = sceneScript.steps || [];
     let candlesRevealedUpto = -1;
     let lineRevealed = false;
     let markerRevealed = false;
 
-    function revealCandle(i, delaySec) {
+    function revealCandle(i, delaySec, pulse) {
       const { wick, body } = candleEls[i];
       wick.style.animationDelay = delaySec + "s";
       body.style.animationDelay = delaySec + "s";
       wick.classList.add("wick");
       body.classList.add("candle-body");
+      if (pulse) {
+        body.classList.add("pulse-glow");
+      }
       svg.appendChild(wick);
       svg.appendChild(body);
     }
 
     function revealLine(delaySec) {
+      if (!line || lineRevealed) return;
       line.style.animationDelay = delaySec + "s";
       liqLabel.style.animationDelay = (delaySec + 0.3) + "s";
       line.classList.add("liq-line");
-      liqLabel.classList.add("fade-in-label"); // triggers fadeIn via opacity/animation
+      liqLabel.classList.add("fade-in-label");
       svg.appendChild(line);
       svg.appendChild(liqLabel);
       lineRevealed = true;
     }
 
     function revealMarker(delaySec) {
+      if (!arrow || markerRevealed) return;
       arrow.style.animationDelay = delaySec + "s";
       arrow.classList.add("grab-mark");
       svg.appendChild(arrow);
       markerRevealed = true;
     }
 
+    function drawRectangle(fromCandleId, delaySec) {
+      const fromCandle = candles.find(c => c.id === fromCandleId);
+      const fromIndex = candles.indexOf(fromCandle);
+      const rectX = candleXCenters[fromIndex] - candleWidth / 2;
+      const rectEndX = startX + candles.length * gap;
+      const rectWidth = rectEndX - rectX;
+
+      const topVal = fromCandle.wickHigh;
+      const bottomVal = fromCandle.wickLow;
+      const rectY = valToY(topVal);
+      const rectHeight = valToY(bottomVal) - rectY;
+
+      obRect = document.createElementNS(svgNS, "rect");
+      obRect.setAttribute("x", rectX);
+      obRect.setAttribute("y", rectY);
+      obRect.setAttribute("width", rectWidth);
+      obRect.setAttribute("height", rectHeight);
+      obRect.classList.add("ob-rectangle");
+      obRect.style.animationDelay = delaySec + "s";
+      svg.insertBefore(obRect, svg.firstChild); // behind candles
+    }
+
+    function highlightZone() {
+      if (obRect) {
+        obRect.classList.add("zone-highlight-pulse");
+      }
+    }
+
     function showStep(stepData) {
-      const el = stepData.elements;
       let localDelay = 0;
+      const actions = stepData.actions || [];
 
-      const targetUpto = el.candles_visible_upto;
-      for (let i = candlesRevealedUpto + 1; i <= targetUpto; i++) {
-        revealCandle(i, localDelay);
-        localDelay += 0.2;
-      }
-      candlesRevealedUpto = Math.max(candlesRevealedUpto, targetUpto);
+      actions.forEach(action => {
+        switch (action.type) {
+          case "reveal_candles":
+          case "reveal_candles_expand_up": {
+            const [from, to] = action.range ? action.range : [action.candle_id, action.candle_id];
+            const startIdx = candles.findIndex(c => c.id === from);
+            const endIdx = candles.findIndex(c => c.id === to);
+            for (let i = startIdx; i <= endIdx; i++) {
+              revealCandle(i, localDelay, false);
+              localDelay += 0.2;
+            }
+            candlesRevealedUpto = Math.max(candlesRevealedUpto, endIdx);
+            break;
+          }
+          case "reveal_candle": {
+            const idx = candles.findIndex(c => c.id === action.candle_id);
+            revealCandle(idx, localDelay, false);
+            localDelay += 0.2;
+            break;
+          }
+          case "reveal_candle_with_pulse": {
+            const idx = candles.findIndex(c => c.id === action.candle_id);
+            revealCandle(idx, localDelay, true);
+            localDelay += 0.2;
+            if (action.highlight_zone) {
+              highlightZone();
+            }
+            break;
+          }
+          case "draw_rectangle": {
+            drawRectangle(action.from_candle, localDelay);
+            localDelay += 0.3;
+            break;
+          }
+          case "old_high_line": {
+            revealLine(localDelay + 0.1);
+            break;
+          }
+          case "grab_marker": {
+            revealMarker(localDelay + 0.3);
+            break;
+          }
+        }
+      });
 
-      if (el.old_high_line && !lineRevealed) {
-        revealLine(localDelay + 0.1);
-      }
-
-      if (el.grab_marker && !markerRevealed) {
-        revealMarker(localDelay + 0.3);
+      // ---- Legacy support: old fixed "elements" schema (liquidity_grab) ----
+      if (stepData.elements) {
+        const el = stepData.elements;
+        const targetUpto = el.candles_visible_upto;
+        if (targetUpto !== undefined) {
+          for (let i = candlesRevealedUpto + 1; i <= targetUpto; i++) {
+            revealCandle(i, localDelay, false);
+            localDelay += 0.2;
+          }
+          candlesRevealedUpto = Math.max(candlesRevealedUpto, targetUpto);
+        }
+        if (el.old_high_line) revealLine(localDelay + 0.1);
+        if (el.grab_marker) revealMarker(localDelay + 0.3);
       }
     }
 

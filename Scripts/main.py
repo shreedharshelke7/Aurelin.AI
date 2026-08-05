@@ -83,110 +83,41 @@ def generate_answer(question,context,grounded):
     return response.choices[0].message.content
 
 
-def get_liquidity_grab_scene():
-    return {
-        "concept": "liquidity_grab",
-        "old_high_level": 62,
-        "candles": [
-            { "open": 40, "close": 45, "wickHigh": 47, "wickLow": 39 },
-            { "open": 46, "close": 49, "wickHigh": 50, "wickLow": 45 },
-            { "open": 50, "close": 53, "wickHigh": 54, "wickLow": 47 },
-            { "open": 53, "close": 50, "wickHigh": 55, "wickLow": 47 },
-            { "open": 51, "close": 53, "wickHigh": 55, "wickLow": 49 },
-            { "open": 53, "close": 55, "wickHigh": 56, "wickLow": 49 },
-            { "open": 55, "close": 57, "wickHigh": 58, "wickLow": 54 },
-            { "open": 56, "close": 54, "wickHigh": 55, "wickLow": 55 },
-            { "open": 54, "close": 59, "wickHigh": 59, "wickLow": 53 },
-            { "open": 59, "close": 61, "wickHigh": 62, "wickLow": 58 },
-            { "open": 61, "close": 57, "wickHigh": 61, "wickLow": 58 },
-            { "open": 57, "close": 55, "wickHigh": 58, "wickLow": 54 },
-            { "open": 55, "close": 56, "wickHigh": 54, "wickLow": 57 },
-            { "open": 56, "close": 54, "wickHigh": 57, "wickLow": 53 },
-            { "open": 54, "close": 50, "wickHigh": 55, "wickLow": 49 },
-            { "open": 50, "close": 48, "wickHigh": 51, "wickLow": 47 },
-            { "open": 48, "close": 45, "wickHigh": 49, "wickLow": 44 },
-            { "open": 45, "close": 49, "wickHigh": 50, "wickLow": 44 },
-            { "open": 49, "close": 52, "wickHigh": 48, "wickLow": 54 },
-            { "open": 51, "close": 50, "wickHigh": 52, "wickLow": 49 },
-            { "open": 50, "close": 54, "wickHigh": 55, "wickLow": 49 },
-            { "open": 54, "close": 56, "wickHigh": 57, "wickLow": 53 },
-            { "open": 56, "close": 58, "wickHigh": 59, "wickLow": 55 },
-            { "open": 58, "close": 59, "wickHigh": 60, "wickLow": 57 },
-            { "open": 59, "close": 60, "wickHigh": 61, "wickLow": 58 },
-            { "open": 60, "close": 57, "wickHigh": 70, "wickLow": 56 },
-            { "open": 57, "close": 55, "wickHigh": 58, "wickLow": 52 },
-            { "open": 55, "close": 50, "wickHigh": 56, "wickLow": 48 },
-            { "open": 50, "close": 44, "wickHigh": 51, "wickLow": 42 },
-            { "open": 44, "close": 38, "wickHigh": 45, "wickLow": 36 },
-            { "open": 38, "close": 30, "wickHigh": 39, "wickLow": 28 },
-            { "open": 30, "close": 24, "wickHigh": 31, "wickLow": 22 }
-        ],
-        "grab_candle_index": 25,
-        "direction": "sellside_grab",
-        "label": "Sell-side Liquidity Grab — Wick Spikes Through Old High, Then Reverses Down",
-        "steps": [
-            {
-                "step_id": 1,
-                "title": "range_forms",
-                "elements": {
-                    "candles_visible_upto": 15,
-                    "old_high_line": False,
-                    "grab_marker": False
-                }
-            },
-            {
-                "step_id": 2,
-                "title": "old_high_marked",
-                "elements": {
-                    "candles_visible_upto": 15,
-                    "old_high_line": True,
-                    "grab_marker": False
-                }
-            },
-            {
-                "step_id": 3,
-                "title": "liquidity_grab",
-                "elements": {
-                    "candles_visible_upto": 25,
-                    "old_high_line": True,
-                    "grab_marker": True
-                },
-                "highlight": "grab_candle_index"
-            },
-            {
-                "step_id": 4,
-                "title": "reversal",
-                "elements": {
-                    "candles_visible_upto": 31,
-                    "old_high_line": True,
-                    "grab_marker": True
-                },
-                "highlight": "grab_candle_index"
-            }
-        ]
-    }
-
 def get_order_block_scene():
     scene = {
         "concept": "order_block",
         "candles": [
-            {"id": 1, "open": 100, "high": 101, "low": 97,  "close": 98,  "type": "setup"},
-            {"id": 2, "open": 98,  "high": 99,  "low": 95,  "close": 96,  "type": "setup"},
-            {"id": 3, "open": 96,  "high": 97,  "low": 93,  "close": 94,  "type": "ob_candle"},
-            {"id": 4, "open": 94,  "high": 99,  "low": 93.5,"close": 98,  "type": "impulse"},
-            {"id": 5, "open": 98,  "high": 104, "low": 97,  "close": 103, "type": "impulse"},
-            {"id": 6, "open": 103, "high": 105, "low": 100, "close": 101, "type": "return"},
-            {"id": 7, "open": 101, "high": 102, "low": 96.5,"close": 97,  "type": "reaction"},
-            {"id": 8, "open": 97,  "high": 103, "low": 96,  "close": 102, "type": "expansion"}
+            {"id": 1,  "open": 70, "close": 66, "wickHigh": 71, "wickLow": 65},
+            {"id": 2,  "open": 66, "close": 62, "wickHigh": 67, "wickLow": 60},
+            {"id": 3,  "open": 62, "close": 59, "wickHigh": 63, "wickLow": 57},
+            {"id": 4,  "open": 59, "close": 61, "wickHigh": 62, "wickLow": 57},
+            {"id": 5,  "open": 61, "close": 57, "wickHigh": 62, "wickLow": 55},
+            {"id": 6,  "open": 57, "close": 54, "wickHigh": 58, "wickLow": 52},
+            {"id": 7,  "open": 54, "close": 50, "wickHigh": 55, "wickLow": 48},
+            {"id": 8,  "open": 50, "close": 55, "wickHigh": 56, "wickLow": 49},
+            {"id": 9,  "open": 55, "close": 60, "wickHigh": 61, "wickLow": 54},
+            {"id": 10, "open": 60, "close": 64, "wickHigh": 65, "wickLow": 59},
+            {"id": 11, "open": 64, "close": 68, "wickHigh": 69, "wickLow": 63},
+            {"id": 12, "open": 68, "close": 72, "wickHigh": 73, "wickLow": 67},
+            {"id": 13, "open": 72, "close": 75, "wickHigh": 76, "wickLow": 70},
+            {"id": 14, "open": 75, "close": 71, "wickHigh": 76, "wickLow": 69},
+            {"id": 15, "open": 71, "close": 66, "wickHigh": 72, "wickLow": 64},
+            {"id": 16, "open": 66, "close": 60, "wickHigh": 67, "wickLow": 58},
+            {"id": 17, "open": 60, "close": 54, "wickHigh": 61, "wickLow": 52},
+            {"id": 18, "open": 54, "close": 58, "wickHigh": 59, "wickLow": 49},
+            {"id": 19, "open": 58, "close": 62, "wickHigh": 63, "wickLow": 57},
+            {"id": 20, "open": 62, "close": 66, "wickHigh": 67, "wickLow": 61},
+            {"id": 21, "open": 66, "close": 70, "wickHigh": 71, "wickLow": 65},
+            {"id": 22, "open": 70, "close": 74, "wickHigh": 75, "wickLow": 69}
         ],
         "steps": [
-            {"step": 1, "action": "reveal_candles", "range": [1, 2], "narration": "Price is trending down, forming lower lows."},
-            {"step": 2, "action": "reveal_candle_with_pulse", "candle_id": 3, "narration": "This is the last down-close candle before the move — our potential order block."},
-            {"step": 3, "action": "reveal_candles", "range": [4, 5], "narration": "Price makes a strong impulsive move up, confirming this was the pivot."},
-            {"step": 4, "action": "draw_rectangle", "from_candle": 3, "extend_to": "end", "narration": "This candle's range becomes our bullish order block."},
-            {"step": 5, "action": "reveal_candle", "candle_id": 6, "narration": "Price later pulls back, returning toward this zone."},
-            {"step": 6, "action": "reveal_candle_with_pulse", "candle_id": 7, "highlight_zone": True, "narration": "Price reacts right at the order block — this is the test."},
-            {"step": 7, "action": "reveal_candles_expand_up", "range": [8], "narration": "And expands upward — the order block held as support."}
+            {"actions": [{"type": "reveal_candles", "range": [1, 6]}]},
+            {"actions": [{"type": "reveal_candle_with_pulse", "candle_id": 7}]},
+            {"actions": [{"type": "reveal_candles", "range": [8, 13]}]},
+            {"actions": [{"type": "draw_rectangle", "from_candle": 7}]},
+            {"actions": [{"type": "reveal_candles", "range": [14, 17]}]},
+            {"actions": [{"type": "reveal_candle_with_pulse", "candle_id": 18, "highlight_zone": True}]},
+            {"actions": [{"type": "reveal_candles_expand_up", "range": [19, 22]}]}
         ]
     }
     return scene
