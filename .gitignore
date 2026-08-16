@@ -7,4 +7,7 @@ venv/
 .DS_Store
 .vscode/
 *.zip
+Archive/
+__pycache__/
+media/
 lightweight-charts.js
