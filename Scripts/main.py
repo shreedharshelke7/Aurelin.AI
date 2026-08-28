@@ -5,36 +5,16 @@ from dotenv import load_dotenv
 import numpy as np 
 from google.genai import types
 from groq import Groq
-from tavily import TavilyClient
+from url_Crawler import scrape_page
+from web_url_scrape import url_fetch
+from spellchecker import SpellChecker
+from visualize import run_manim,save_LLM2_output
 
 load_dotenv()
-client = genai.Client(api_key=os.getenv("gemini_api_key"))
-groq_client = Groq(api_key=os.getenv("groq_api_key"))
-tavily_client = TavilyClient(api_key=os.getenv("tavily_api_key"))
-
-
-def web_search_and_embed(question):
-    response = tavily_client.search(query=question, max_results=1)
-    if not response["results"]:
-        return None, None
-
-    web_text = response["results"][0]["content"]
-
-    result = client.models.embed_content(
-        model="gemini-embedding-001",
-        contents=web_text,
-        config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT")
-    )
-    web_embedding=None
-    if result.embeddings is not None:
-        web_embedding = result.embeddings[0].values
-
-    return web_text, web_embedding
-
-
-def load_chunks(path):
-    with open(path,"r",encoding="utf-8") as f:
-        return json.load(f)
+spell = SpellChecker()
+client = genai.Client(api_key=os.getenv("embed_api_key"))
+LLM1_client = Groq(api_key=os.getenv("LLM1_api_key"))
+LLM2_client = genai.Client(api_key=os.getenv("LLM2_api_key"))
 
 def query_text(text):
     result = client.models.embed_content(model="gemini-embedding-001",contents=text,
@@ -47,116 +27,150 @@ def cosine_similarity(a,b):
     b = np.array(b)
     return np.dot(a,b)/(np.linalg.norm(a)* np.linalg.norm(b))
 
-def find_best_chunk(question,chunks):
-    query_vector = query_text(question)
 
-    best_chunk=None
-    best_score=-1
-    for chunk in chunks:
-        score = cosine_similarity(query_vector,chunk["embedding"])
-        if score > best_score:
-            best_score=score
-            best_chunk = chunk
-    return best_chunk,best_score
+def LLM1_Narration_scene(question, context):
+    prompt = """You are a math visualization planner. Your job is to describe an animated explanation
+    that a SEPARATE AI (which only writes Manim Python code, and cannot see the source material) will build from your description alone.
 
-def generate_answer(question,context,grounded):
-    if grounded:
-        prompt = f"""You are a trading tutor. Below is lecture content and possibly additional web reference info, followed by a student's question.
-                Lecture content: {context}
-                Question: {question}
-                Instructions:
-                        - Answer the question directly, as if explaining it yourself in conversation.
-                        - Synthesize the information fully in your own words — do not copy sentences, headers, formatting, or structure from the source text.
-                        - Never mention specific creator names, channel names, brands, or where any information came from.
-                        - Keep the answer as one unified, natural explanation — not separate sections.
-                        - If the content is truly unrelated to the question, respond exactly: "This isn't covered in the lecture content I have."
-                Answer:"""
-    else:
-        prompt = f"""You are a trading tutor. No matching lecture content was found for this question.
-        Answer using your general trading knowledge, and mention that this isn't from the lecture material.
-        Question: {question}Answer:"""
+    Reference content: {}
 
-    response = groq_client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+    Question: {}
+
+    Output ONLY valid JSON, no other text, in this exact structure:
+    {{
+        "narration": "Full spoken explanation of the concept, in your own words.",
+        "objects": [
+            {{
+                "name": "<unique_id, e.g. triangle_main>",
+                "shape": "<triangle|square|line|label|equation|circle>",
+                "persists_until_step": <step number or "end">
+            }}
+            ],
+        "scene_steps": [
+            {{
+                "step": 1,
+                "action": "<one of: draw, label, transform, fade_out, highlight, show_equation>",
+                "target": "<object name from 'objects' list>",
+                "relation": "<if applicable>",
+                "narration_snippet": "<short text spoken during this step>"
+            }}
+        ]
+    }}
+
+    Rules:
+    1. Declare every shape in "objects" FIRST, with a unique lowercase_snake_case name.
+    2. Every "relation" must be specific enough to compute position/size without guessing.
+    3. Break actions into the smallest reasonable unit.
+    4. Every object drawn must later have a "fade_out" step OR be marked "persists_until_step": "end".
+    5. Use "transform" only when one object visually morphs.
+    6. Keep total steps between 5 and 12.
+    Output ONLY the JSON object.""".format(context, question)
+    
+    response = LLM1_client.chat.completions.create(
+        model="openai/gpt-oss-20b",
         messages=[{"role": "user", "content": prompt}]
     )
     return response.choices[0].message.content
 
 
-def get_order_block_scene():
-    scene = {
-        "concept": "order_block",
-        "candles": [
-            {"id": 1,  "open": 70, "close": 66, "wickHigh": 71, "wickLow": 65},
-            {"id": 2,  "open": 66, "close": 62, "wickHigh": 67, "wickLow": 60},
-            {"id": 3,  "open": 62, "close": 59, "wickHigh": 63, "wickLow": 57},
-            {"id": 4,  "open": 59, "close": 61, "wickHigh": 62, "wickLow": 57},
-            {"id": 5,  "open": 61, "close": 57, "wickHigh": 62, "wickLow": 55},
-            {"id": 6,  "open": 57, "close": 54, "wickHigh": 58, "wickLow": 52},
-            {"id": 7,  "open": 54, "close": 50, "wickHigh": 55, "wickLow": 48},
-            {"id": 8,  "open": 50, "close": 55, "wickHigh": 56, "wickLow": 49},
-            {"id": 9,  "open": 55, "close": 60, "wickHigh": 61, "wickLow": 54},
-            {"id": 10, "open": 60, "close": 64, "wickHigh": 65, "wickLow": 59},
-            {"id": 11, "open": 64, "close": 68, "wickHigh": 69, "wickLow": 63},
-            {"id": 12, "open": 68, "close": 72, "wickHigh": 73, "wickLow": 67},
-            {"id": 13, "open": 72, "close": 75, "wickHigh": 76, "wickLow": 70},
-            {"id": 14, "open": 75, "close": 71, "wickHigh": 76, "wickLow": 69},
-            {"id": 15, "open": 71, "close": 66, "wickHigh": 72, "wickLow": 64},
-            {"id": 16, "open": 66, "close": 60, "wickHigh": 67, "wickLow": 58},
-            {"id": 17, "open": 60, "close": 54, "wickHigh": 61, "wickLow": 52},
-            {"id": 18, "open": 54, "close": 58, "wickHigh": 59, "wickLow": 49},
-            {"id": 19, "open": 58, "close": 62, "wickHigh": 63, "wickLow": 57},
-            {"id": 20, "open": 62, "close": 66, "wickHigh": 67, "wickLow": 61},
-            {"id": 21, "open": 66, "close": 70, "wickHigh": 71, "wickLow": 65},
-            {"id": 22, "open": 70, "close": 74, "wickHigh": 75, "wickLow": 69}
-        ],
-        "steps": [
-            {"actions": [{"type": "reveal_candles", "range": [1, 6]}]},
-            {"actions": [{"type": "reveal_candle_with_pulse", "candle_id": 7}]},
-            {"actions": [{"type": "reveal_candles", "range": [8, 13]}]},
-            {"actions": [{"type": "draw_rectangle", "from_candle": 7}]},
-            {"actions": [{"type": "reveal_candles", "range": [14, 17]}]},
-            {"actions": [{"type": "reveal_candle_with_pulse", "candle_id": 18, "highlight_zone": True}]},
-            {"actions": [{"type": "reveal_candles_expand_up", "range": [19, 22]}]}
-        ]
-    }
-    return scene
+def LLM2_exe_code(LLM1_ouput):
+    rules = """You are LLM2 of AURELIN AI.
+    Your only task is to convert the provided narration and scene descriptions into valid executable Manim Community Edition Python code.
+    RULES:
+    1. Return ONLY Python code.
+    2. Do not use markdown code fences.
+    3. Do not add explanations, comments outside the code, or extra text.
+    4. Always start with:
+    from manim import *
+    5. Generate exactly one Scene class named AurelinScene .
+    6. The Scene class must contain:def construct(self):
+    7. Follow the narration and scene descriptions in the exact given order.
+    8. Every described visual element must appear in the animation.
+    9. Use appropriate Manim objects such as:
+    - Text
+    - MathTex
+    - Line
+    - Polygon
+    - Circle
+    - Square
+    - Arrow
+    - VGroup
+    - Axes
+    - NumberPlane
+    10. Use Manim animations such as:
+        - Create
+        - Write
+        - FadeIn
+        - FadeOut
+        - Transform
+        - ReplacementTransform
+    11. Keep all objects inside the visible Manim frame.
+    12. Prevent text, equations, labels, and diagrams from overlapping.
+    13. Use relative positioning methods whenever possible:
+        next_to()
+        arrange()
+        to_edge()
+        shift()
+        move_to()
+    14. Mathematical expressions must use MathTex whenever appropriate.
+    15. Do not use external images, files, internet resources, or APIs.
+    16. Do not require any Python package other than Manim and Python standard libraries.
+    17. Do not generate narration/audio code.
+    18. Do not generate file handling or subprocess code.
+    19. Do not generate interactive input.
+    20. The final code must be directly executable by Manim without manual modification.
+    21. Treat the supplied reference code as a style and implementation reference.
+    22. Do not blindly copy the reference code.
+    23. Adapt the reference implementation according to the current narration and scenes.
+    24. Prefer simple, reliable Manim implementations over unnecessarily complex animations.
+    25. Before producing the final answer, internally verify:
+        - syntax is valid
+        - all variables are defined
+        - Manim methods/classes exist
+        - scene order matches the input
+        - objects remain visible
+        - no obvious overlaps occur
+    26. after every step components from previous step which will not be used or necessary on further step remove those components.
+    OUTPUT:
+    Return only the complete executable Manim Python source code.
+    """
+    prompt = f"""RULES:{rules} NARRATION and scene : {LLM1_ouput} Generate the complete executable Manim Python code.Return only Python code."""
+    response = LLM2_client.models.generate_content(
+        model="gemini-3.6-flash",
+        contents=prompt
+    )
+    return response.text
 
-def get_scene_script(chunk, score, threshold):
-    if score >= threshold and chunk.get("concept") == "ob":
-        return get_order_block_scene()
-    return None
-
-def save_scene_script(scene):
-    output_path = "scene_output.json"
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(scene, f, indent=2)
+def correct_spelling(input_text):
+    words = list(input_text.split())
+    Question = ""
+    for word in words:
+        miss_spelled = spell.unknown([word])
+        if miss_spelled:
+            corrected_word = str(spell.correction(word))
+            Question += corrected_word
+            Question += " "
+            continue
+        Question += word
+        Question += " "
+    return Question 
 
 
 if __name__ == "__main__":
-    similarity_threshold = 0.65
-    chunks= load_chunks("Data/embeddings.json")
-    query = input("Ask Question : ")
-    best_chunk, best_chunk_score = find_best_chunk(query, chunks)
-    web_text,web_embedding = web_search_and_embed(query)
-    if best_chunk is not None:
-        web_chunk_score = cosine_similarity(web_embedding,best_chunk['embedding'])
-        print(f"Matched chunk: [{best_chunk['timestamp']}] {best_chunk['text']}")
-        print(f"best chunk score : {best_chunk_score}")
-        print(f"Web Search : {web_text}")
-        print(f"web search chunk score : {web_chunk_score}")
-        if best_chunk_score >= similarity_threshold:
-            if web_chunk_score >= similarity_threshold:
-                context = f"Transcript info:\n{best_chunk['text']}\n\nAdditional web info:\n{web_text}"
-                print(generate_answer(query,context,grounded=True))    
-            else:
-                context = best_chunk['text']
-                print(generate_answer(query,context,grounded=True))
-        else:  
-            context=web_text
-            print(generate_answer(query,context,grounded=False))
-    scene = get_scene_script(best_chunk, best_chunk_score, similarity_threshold)
-    print(scene)
-    if scene:
-        save_scene_script(scene)
-        
+    input_text = input("Question : ")
+    Question =correct_spelling(input_text)       
+    print(Question)
+    result = " "
+    urls = url_fetch(Question)
+    for url in urls:
+        print(url)
+        result +=" | "
+        result +=scrape_page(url,Question)
+    LLM1_ouput = LLM1_Narration_scene(Question,result)
+    code = LLM2_exe_code(LLM1_ouput)
+    file_path = save_LLM2_output(code,Question)
+    result = run_manim(file_path)
+    if result:
+        print("visualized successfully")
+    else:
+        print("Visualization Failed !!!")

@@ -11,3 +11,5 @@ Archive/
 __pycache__/
 media/
 lightweight-charts.js
+media_output/
+media/

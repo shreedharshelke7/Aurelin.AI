@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from google.genai import types
 from time import sleep
 load_dotenv()
-client = genai.Client(api_key= os.getenv("gemini_api_key"))
+client = genai.Client(api_key= os.getenv("embed_api_key"))
 
 def embed_chunks(input_path,output_path):
 
