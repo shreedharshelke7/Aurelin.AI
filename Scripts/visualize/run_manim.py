@@ -1,4 +1,7 @@
 import subprocess
+import shutil
+import os
+
 def run_manim(file_path, scene_name="AurelinScene"):
     cmd = [
         "python", "-m", "manim",
@@ -11,7 +14,10 @@ def run_manim(file_path, scene_name="AurelinScene"):
     result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
-        print("Manim stopped : \n",result.stderr)
-        return False
+        print("Manim stopped : \n", result.stderr)
+        return False, result.stderr
 
-    return True
+    if os.path.exists("media"):
+        shutil.rmtree("media")
+
+    return True, None

@@ -1,4 +1,3 @@
-import json
 import os
 from google import genai
 from dotenv import load_dotenv
@@ -9,6 +8,7 @@ from url_Crawler import scrape_page
 from web_url_scrape import url_fetch
 from spellchecker import SpellChecker
 from visualize import run_manim,save_LLM2_output
+from Rag_op import match_question ,feedback_cache
 
 load_dotenv()
 spell = SpellChecker()
@@ -22,10 +22,6 @@ def query_text(text):
     if result.embeddings is None:return None
     return result.embeddings[0].values
 
-def cosine_similarity(a,b):
-    a = np.array(a)
-    b = np.array(b)
-    return np.dot(a,b)/(np.linalg.norm(a)* np.linalg.norm(b))
 
 
 def LLM1_Narration_scene(question, context):
@@ -133,6 +129,8 @@ def LLM2_exe_code(LLM1_ouput):
     26. after every step components from previous step which will not be used or necessary on further step remove those components.
     OUTPUT:
     Return only the complete executable Manim Python source code.
+    27. ONLY use these Mobject classes: Text, MathTex, Tex, Line, Polygon, Circle, Square, Rectangle, Arrow, Dot, VGroup, Axes, NumberPlane, VMobject.
+    28. Do NOT use: Polyline, Path, Shape, or any class not listed in rule 27 - if unsure, use Polygon or VGroup of Line segments instead.
     """
     prompt = f"""RULES:{rules} NARRATION and scene : {LLM1_ouput} Generate the complete executable Manim Python code.Return only Python code."""
     response = LLM2_client.models.generate_content(
@@ -155,22 +153,41 @@ def correct_spelling(input_text):
         Question += " "
     return Question 
 
+def call_agents(Question, context):
+    LLM1_ouput = LLM1_Narration_scene(Question, context)
+    code = LLM2_exe_code(LLM1_ouput)
+    file_path = save_LLM2_output(code)
+    success, error = run_manim(file_path)
+
+    if not success:
+        # retry once with the error fed back to LLM2
+        code = LLM2_fix_code(code, error)
+        file_path = save_LLM2_output(code)
+        success, error = run_manim(file_path)
+
+    return success
+
+def LLM2_fix_code(previous_code, error_message):
+    prompt = f"""Your previous Manim code failed with this error:{error_message}Previous code:{previous_code}
+    Fix the error and return ONLY the corrected, complete Python code, following the same rules as before (valid Manim CE syntax, only real Manim classes, no markdown fences, no explanations)."""
+    response = LLM2_client.models.generate_content(
+        model="gemini-3.6-flash",
+        contents=prompt
+    )
+    return response.text
 
 if __name__ == "__main__":
     input_text = input("Question : ")
-    Question =correct_spelling(input_text)       
-    print(Question)
-    result = " "
-    urls = url_fetch(Question)
-    for url in urls:
-        print(url)
-        result +=" | "
-        result +=scrape_page(url,Question)
-    LLM1_ouput = LLM1_Narration_scene(Question,result)
-    code = LLM2_exe_code(LLM1_ouput)
-    file_path = save_LLM2_output(code,Question)
-    result = run_manim(file_path)
-    if result:
-        print("visualized successfully")
+    question = correct_spelling(input_text)
+    best_chunk = match_question(question)
+
+    if best_chunk["context"] is None:
+        context = ""
+        for url in url_fetch(question):
+            print(url)
+            context += " | " + scrape_page(url, question)
     else:
-        print("Visualization Failed !!!")
+        context = best_chunk["context"]
+
+    result = call_agents(question, context)
+    feedback_cache(result, question, best_chunk["embedding"], context, best_chunk.get("needs_replace", False))
