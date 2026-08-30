@@ -1,4 +1,6 @@
+import json
 import os
+import re
 from google import genai
 from dotenv import load_dotenv
 import numpy as np 
@@ -13,7 +15,7 @@ from Rag_op import match_question ,feedback_cache
 load_dotenv()
 spell = SpellChecker()
 client = genai.Client(api_key=os.getenv("embed_api_key"))
-LLM1_client = Groq(api_key=os.getenv("LLM1_api_key"))
+backup_LLM_client = Groq(api_key=os.getenv("LLM1_api_key"))
 LLM2_client = genai.Client(api_key=os.getenv("LLM2_api_key"))
 
 def query_text(text):
@@ -23,6 +25,9 @@ def query_text(text):
     return result.embeddings[0].values
 
 
+def clean_json_response(raw_text):
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw_text.strip())
+    return cleaned.strip()
 
 def LLM1_Narration_scene(question, context):
     prompt = """You are a math visualization planner. Your job is to describe an animated explanation
@@ -60,13 +65,15 @@ def LLM1_Narration_scene(question, context):
     4. Every object drawn must later have a "fade_out" step OR be marked "persists_until_step": "end".
     5. Use "transform" only when one object visually morphs.
     6. Keep total steps between 5 and 12.
-    Output ONLY the JSON object.""".format(context, question)
+    7.Do not use markdown code fences.
+    8.Output ONLY the JSON object.""".format(context, question)
     
-    response = LLM1_client.chat.completions.create(
-        model="openai/gpt-oss-20b",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response.choices[0].message.content
+    response = LLM2_client.models.generate_content(
+            model="gemini-3.5-flash-lite",
+            contents=prompt
+        )
+    return response.text
+
 
 
 def LLM2_exe_code(LLM1_ouput):
@@ -134,7 +141,7 @@ def LLM2_exe_code(LLM1_ouput):
     """
     prompt = f"""RULES:{rules} NARRATION and scene : {LLM1_ouput} Generate the complete executable Manim Python code.Return only Python code."""
     response = LLM2_client.models.generate_content(
-        model="gemini-3.6-flash",
+        model="gemini-3.5-flash-lite",
         contents=prompt
     )
     return response.text
@@ -154,18 +161,20 @@ def correct_spelling(input_text):
     return Question 
 
 def call_agents(Question, context):
-    LLM1_ouput = LLM1_Narration_scene(Question, context)
+    LLM1_ouput =clean_json_response(LLM1_Narration_scene(Question, context))
+    parsed = json.loads(LLM1_ouput)
+    narration = parsed["narration"]
     code = LLM2_exe_code(LLM1_ouput)
     file_path = save_LLM2_output(code)
-    success, error = run_manim(file_path)
+    success, error ,visual_path= run_manim(file_path)
 
     if not success:
         # retry once with the error fed back to LLM2
         code = LLM2_fix_code(code, error)
         file_path = save_LLM2_output(code)
-        success, error = run_manim(file_path)
+        success, error ,visual_path= run_manim(file_path)
 
-    return success
+    return success,narration,visual_path,error
 
 def LLM2_fix_code(previous_code, error_message):
     prompt = f"""Your previous Manim code failed with this error:{error_message}Previous code:{previous_code}
@@ -189,5 +198,12 @@ if __name__ == "__main__":
     else:
         context = best_chunk["context"]
 
-    result = call_agents(question, context)
-    feedback_cache(result, question, best_chunk["embedding"], context, best_chunk.get("needs_replace", False))
+    success, narration, video_path, error = call_agents(question, context)
+
+    if success:
+        print("Narration:", narration)
+        print("Video saved at:", video_path)
+    else:
+        print("Failed:", error)
+
+    feedback_cache(success, question, best_chunk["embedding"], context, best_chunk.get("needs_replace", False))
