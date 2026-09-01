@@ -1,12 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from Rag_op import match_question, feedback_cache
+
+from Rag_op import match_question
 from url_Crawler import scrape_page
 from web_url_scrape import url_fetch
 from main import call_agents, correct_spelling
+
 from supabase_client import supabase
 from storage_manager import upload_video
+from tts_manager import generate_audio
+from media_merger import merge_video_audio
 
 
 app = FastAPI()
@@ -14,7 +18,10 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://172.20.10.2:3000"
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -37,6 +44,7 @@ def ask(payload: Question):
     request_id = None
 
     try:
+
         # -------------------------
         # 1. SPELL CHECK
         # -------------------------
@@ -57,6 +65,7 @@ def ask(payload: Question):
                 "stage": "started",
                 "narration": None,
                 "generated_video_path": None,
+                "generated_audio_path": None,
                 "error": None
             })
             .execute()
@@ -70,9 +79,7 @@ def ask(payload: Question):
 
         update_request(
             request_id,
-            {
-                "stage": "cache_check"
-            }
+            {"stage": "cache_check"}
         )
 
         best_chunk = match_question(question)
@@ -85,9 +92,7 @@ def ask(payload: Question):
 
             update_request(
                 request_id,
-                {
-                    "stage": "retrieval"
-                }
+                {"stage": "retrieval"}
             )
 
             context = ""
@@ -107,9 +112,7 @@ def ask(payload: Question):
 
         update_request(
             request_id,
-            {
-                "stage": "generation"
-            }
+            {"stage": "generation"}
         )
 
         success, narration, video_path, error = call_agents(
@@ -118,19 +121,7 @@ def ask(payload: Question):
         )
 
         # -------------------------
-        # 6. CACHE FEEDBACK
-        # -------------------------
-
-        feedback_cache(
-            success,
-            question,
-            best_chunk["embedding"],
-            context,
-            best_chunk.get("needs_replace", False)
-        )
-
-        # -------------------------
-        # 7. PIPELINE FAILED
+        # 6. PIPELINE FAILED
         # -------------------------
 
         if not success:
@@ -156,23 +147,50 @@ def ask(payload: Question):
             }
 
         # -------------------------
-        # 8. UPLOAD VIDEO
+        # 7. GENERATE TTS AUDIO
         # -------------------------
 
         update_request(
             request_id,
-            {
-                "stage": "uploading"
-            }
+            {"stage": "tts_generation"}
         )
 
-        remote_path, signed_url = upload_video(
-            video_path,
+        audio_path = generate_audio(
+            narration,
             request_id
         )
 
         # -------------------------
-        # 9. COMPLETE
+        # 8. MERGE VIDEO + AUDIO
+        # -------------------------
+
+        update_request(
+            request_id,
+            {"stage": "media_merge"}
+        )
+
+        final_video_path = merge_video_audio(
+            video_path,
+            audio_path,
+            request_id
+        )
+
+        # -------------------------
+        # 9. UPLOAD FINAL VIDEO
+        # -------------------------
+
+        update_request(
+            request_id,
+            {"stage": "uploading"}
+        )
+
+        remote_path, signed_url = upload_video(
+            final_video_path,
+            request_id
+        )
+
+        # -------------------------
+        # 10. COMPLETE
         # -------------------------
 
         update_request(
@@ -182,6 +200,7 @@ def ask(payload: Question):
                 "stage": "complete",
                 "narration": narration,
                 "generated_video_path": remote_path,
+                "generated_audio_path": None,
                 "error": None
             }
         )

@@ -69,7 +69,7 @@ def LLM1_Narration_scene(question, context):
     8.Output ONLY the JSON object.""".format(context, question)
     
     response = LLM2_client.models.generate_content(
-            model="gemini-3.5-flash-lite",
+            model="gemini-3.6-flash",
             contents=prompt
         )
     return response.text
@@ -141,7 +141,7 @@ def LLM2_exe_code(LLM1_ouput):
     """
     prompt = f"""RULES:{rules} NARRATION and scene : {LLM1_ouput} Generate the complete executable Manim Python code.Return only Python code."""
     response = LLM2_client.models.generate_content(
-        model="gemini-3.5-flash-lite",
+        model="gemini-3.6-flash",
         contents=prompt
     )
     return response.text

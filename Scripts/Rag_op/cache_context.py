@@ -2,8 +2,12 @@ import json
 import os
 import numpy as np
 from .embed import embed_chunks
+from pathlib import Path
+from pathlib import Path
 
-def new_cache_saver(question, embedding, context, satisfied=True, path="RAG/cache.json"):
+CACHE_PATH = Path(__file__).resolve().parents[2] / "RAG" / "cache.json"
+
+def new_cache_saver(question, embedding, context, satisfied=True, path=CACHE_PATH):
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             cache = json.load(f)
@@ -21,7 +25,7 @@ def new_cache_saver(question, embedding, context, satisfied=True, path="RAG/cach
     with open(path, "w", encoding="utf-8") as f:
         json.dump(cache, f, indent=2)
 
-def replace_unsatisfied_entry(question, embedding,satisfied, new_context, path="RAG/cache.json"):
+def replace_unsatisfied_entry(question, embedding,satisfied, new_context, path=CACHE_PATH):
 
     with open(path, "r", encoding="utf-8") as f:
         cache = json.load(f)
@@ -50,7 +54,7 @@ def cosine_similarity(a,b):
     
 
 def match_question(question):
-    path = "RAG/cache.json"
+    path = CACHE_PATH
     question_embedding = embed_chunks(question)
 
     if os.path.exists(path):
@@ -89,11 +93,11 @@ def feedback_cache(result, question, embedding, context, needs_replace=False):
 
     if feedback == "no":
         if needs_replace:
-            replace_unsatisfied_entry(question, embedding, context, False)
+            replace_unsatisfied_entry(question, embedding, False, context)
         else:
             new_cache_saver(question, embedding, context, satisfied=False)
     else:
         if needs_replace:
-            replace_unsatisfied_entry(question, embedding, context, True)
+            replace_unsatisfied_entry(question, embedding, True, context)
         else:
             new_cache_saver(question, embedding, context, satisfied=True)
